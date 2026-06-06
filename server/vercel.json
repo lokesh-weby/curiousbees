@@ -1,0 +1,25 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd ../.. && npm install",
+  "buildCommand": "cd ../.. && npm run vercel-build --workspace=apps/api",
+  "builds": [
+    {
+      "src": "dist/src/main.js",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "dist/**/*.js",
+          "node_modules/.prisma/**",
+          "node_modules/@prisma/client/**",
+          "node_modules/@srm-curiousbees/**"
+        ]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "dist/src/main.js"
+    }
+  ]
+}

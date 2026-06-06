@@ -1,0 +1,53 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "dotenv -e .env -- prisma generate && nest build",
+    "dev": "nest start --watch",
+    "start": "nest start",
+    "start:prod": "node dist/src/main",
+    "prisma:generate": "dotenv -e .env -- prisma generate",
+    "prisma:validate": "dotenv -e .env -- prisma validate",
+    "prisma:push": "dotenv -e .env -- prisma db push",
+    "prisma:migrate": "dotenv -e .env -- prisma migrate dev",
+    "prisma:seed": "ts-node prisma/seed.ts"
+  },
+  "dependencies": {
+    "@nestjs/bullmq": "^11.0.4",
+    "@nestjs/common": "^11.1.24",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.1.24",
+    "@nestjs/platform-express": "^11.1.24",
+    "@nestjs/schedule": "^5.0.1",
+    "@prisma/client": "^6.19.3",
+    "axios": "^1.16.1",
+    "bullmq": "^5.77.6",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "dotenv": "^16.6.1",
+    "express": "^4.19.2",
+    "firebase-admin": "^10.3.0",
+    "imap-simple": "^5.1.0",
+    "ioredis": "^5.11.0",
+    "mailparser": "^3.9.9",
+    "nodemailer": "^8.0.10",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.21",
+    "@nestjs/schematics": "^11.1.0",
+    "@types/express": "^4.17.21",
+    "@types/imap-simple": "^4.2.10",
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^20.12.12",
+    "dotenv-cli": "^11.0.0",
+    "prisma": "6.19.3",
+    "ts-loader": "^9.5.1",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.4.5"
+  }
+}

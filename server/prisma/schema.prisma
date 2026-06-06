@@ -1,0 +1,385 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-1.0.x", "rhel-openssl-3.0.x", "linux-musl", "linux-musl-openssl-3.0.x"]
+}
+
+enum Role {
+  RESEARCH_SUPERVISOR
+  RESEARCH_SCHOLAR
+  INSTITUTION_ADMIN
+}
+
+model User {
+  id            String          @id @default(cuid())
+  firebaseUid   String?         @unique
+  name          String?
+  email         String          @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role            @default(RESEARCH_SCHOLAR)
+  department    String?
+  departmentId  String?
+  departmentRef Department?     @relation(fields: [departmentId], references: [id])
+  bio           String?
+  approved      Boolean         @default(false)
+  status        String          @default("ONBOARDING")
+  approvedBy    String?
+  approvedAt    DateTime?
+  suspended     Boolean         @default(false)
+  supervisorId  String?
+  supervisorEmail String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  interests     UserInterest[]
+  threads       Thread[]
+  comments      Comment[]
+  opportunities Opportunity[]
+  notificationTokens NotificationToken[]
+  notifications Notification[]
+  preferences   UserPreference?
+
+  
+  // Supervisor/Scholar mappings
+  supervisor    User?           @relation("SupervisorToScholar", fields: [supervisorId], references: [id])
+  scholars      User[]          @relation("SupervisorToScholar")
+  
+  // Collaboration and Workspace relations
+  collaborationRequests CollaborationRequest[]
+  workspaceMembers      WorkspaceMember[]
+  workspaceAnnouncements WorkspaceAnnouncement[]
+  workspaceFiles        WorkspaceFile[]
+  publications          Publication[]
+  submittedReports      Report[]                @relation("ScholarReports")
+  reviewedReports       Report[]                @relation("SupervisorReports")
+}
+
+// NextAuth v5 standard tables
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// SRM_Recollab Custom MVP Models
+model ResearchInterest {
+  id    String         @id @default(cuid())
+  name  String         @unique
+  users UserInterest[]
+}
+
+model UserInterest {
+  userId     String
+  interestId String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interest   ResearchInterest @relation(fields: [interestId], references: [id], onDelete: Cascade)
+
+  @@id([userId, interestId])
+}
+
+model Thread {
+  id        String    @id @default(cuid())
+  title     String
+  content   String    @db.Text
+  authorId  String
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  tags      String[]
+  comments  Comment[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  threadId  String
+  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Opportunity {
+  id             String   @id @default(cuid())
+  title          String
+  description    String   @db.Text
+  department     String
+  researchDomain String
+  authorId       String
+  author         User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  collaborationRequests CollaborationRequest[]
+}
+
+enum ApprovalStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+  NEEDS_INFO
+}
+
+
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  REVIEW_REQUIRED
+  FAILED
+}
+
+enum EventPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Event {
+  id                String         @id @default(cuid())
+  title             String
+  eventType         String
+  speaker           String?
+  department        String?
+  date              DateTime
+  time              String
+  venue             String
+  topic             String?
+  organizerEmail    String?
+  status            EventStatus
+  priority          EventPriority  @default(MEDIUM)
+
+  // Kept from previous iterations
+  description       String?        @db.Text
+  category          String?
+  posterUrl         String?
+  registrationLink  String?
+  tags              String[]
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  messageId         String?        @unique
+
+  notifications     Notification[]
+
+}
+
+model Notification {
+  id            String   @id @default(cuid())
+  userId        String
+  eventId       String?
+  title         String
+  body          String
+  sentStatus    Boolean  @default(false)
+  openedStatus  Boolean  @default(false)
+  
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event         Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime @default(now())
+}
+
+model NotificationLog {
+  id            String   @id @default(cuid())
+  eventId       String
+  recipientType String
+  channel       String
+  status        String
+  sentAt        DateTime @default(now())
+}
+
+model UserPreference {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  department           String?
+  eventType            String?
+  tags                 String[]
+  notificationsEnabled Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+
+
+model CollaborationRequest {
+  id             String         @id @default(cuid())
+  scholarId      String
+  opportunityId  String
+  status         ApprovalStatus @default(PENDING)
+  message        String?        @db.Text
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  scholar        User           @relation(fields: [scholarId], references: [id], onDelete: Cascade)
+  opportunity    Opportunity    @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@unique([scholarId, opportunityId])
+}
+
+model Workspace {
+  id            String                  @id @default(cuid())
+  title         String
+  description   String?                 @db.Text
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  members       WorkspaceMember[]
+  files         WorkspaceFile[]
+  milestones    WorkspaceMilestone[]
+  announcements WorkspaceAnnouncement[]
+}
+
+model WorkspaceMember {
+  workspaceId   String
+  userId        String
+  role          String                  @default("MEMBER") // "OWNER" | "MEMBER"
+  joinedAt      DateTime                @default(now())
+
+  workspace     Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, userId])
+}
+
+model WorkspaceFile {
+  id            String                  @id @default(cuid())
+  workspaceId   String
+  name          String
+  url           String
+  size          Int                     @default(0)
+  uploadedById  String
+  uploadedAt    DateTime                @default(now())
+
+  workspace     Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  uploadedBy    User                    @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+}
+
+model WorkspaceMilestone {
+  id            String                  @id @default(cuid())
+  workspaceId   String
+  title         String
+  description   String?                 @db.Text
+  dueDate       DateTime?
+  completed     Boolean                 @default(false)
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  workspace     Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model WorkspaceAnnouncement {
+  id            String                  @id @default(cuid())
+  workspaceId   String
+  title         String
+  content       String                  @db.Text
+  authorId      String
+  createdAt     DateTime                @default(now())
+
+  workspace     Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author        User                    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  userId        String?
+  action        String   // e.g. "APPROVE_SCHOLAR", "DELETE_POST", "WORKSPACE_CREATE"
+  details       String?  @db.Text
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+}
+
+model NotificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String   @unique
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+}
+
+model Publication {
+  id          String   @id @default(cuid())
+  title       String
+  authors     String   // Comma-separated list of author names
+  doi         String?
+  publisher   String?
+  year        Int
+  status      String   // e.g. "DRAFT" | "SUBMITTED" | "PUBLISHED" | "UNDER_REVIEW"
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Report {
+  id            String   @id @default(cuid())
+  title         String
+  description   String?  @db.Text
+  status        String   // e.g. "PENDING" | "APPROVED" | "REJECTED" | "NEEDS_INFO"
+  evidenceUrl   String?
+  feedback      String?  @db.Text
+  scholarId     String
+  scholar       User     @relation("ScholarReports", fields: [scholarId], references: [id], onDelete: Cascade)
+  supervisorId  String
+  supervisor    User     @relation("SupervisorReports", fields: [supervisorId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
