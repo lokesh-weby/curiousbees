@@ -14,7 +14,6 @@
     "prisma:seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
-    "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.1.24",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.24",
@@ -22,14 +21,12 @@
     "@nestjs/schedule": "^5.0.1",
     "@prisma/client": "^6.19.3",
     "axios": "^1.16.1",
-    "bullmq": "^5.77.6",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "firebase-admin": "^10.3.0",
     "imap-simple": "^5.1.0",
-    "ioredis": "^5.11.0",
     "mailparser": "^3.9.9",
     "nodemailer": "^8.0.10",
     "reflect-metadata": "^0.2.2",

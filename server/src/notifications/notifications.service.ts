@@ -1,9 +1,8 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Queue } from 'bullmq';
-import { InjectQueue } from '@nestjs/bullmq';
 import { Event as PrismaEvent } from '@prisma/client';
 import * as admin from 'firebase-admin';
+import { FCMService } from './fcm.service';
 
 export interface NotificationJobData {
   eventId: string;
@@ -18,7 +17,7 @@ export class NotificationsService {
 
   constructor(
     private prisma: PrismaService,
-    @InjectQueue('event-notifications') private notificationQueue: Queue
+    private fcmService: FCMService,
   ) {}
 
   /**
@@ -189,17 +188,63 @@ export class NotificationsService {
     const title = `📅 New Event: ${event.eventType}`;
     const body = `${event.title} is happening at ${event.venue} on ${new Date(event.date).toLocaleDateString()}`;
 
-    // Push to Queue for Async Delivery
-    await this.notificationQueue.add('send-event-push', {
+    // Direct Processing for Async Delivery
+    this.logger.log(`Processing notification for event ${event.id} to ${recipients.length} users.`);
+
+    // 1. Fetch device tokens for all matched users
+    const devices = await this.prisma.notificationToken.findMany({
+      where: { userId: { in: recipients } }
+    });
+
+    if (devices.length === 0) {
+      this.logger.warn(`No registered devices found for the ${recipients.length} target users. Skipping FCM dispatch.`);
+      
+      // Log failures for analytics
+      await this.prisma.notificationLog.createMany({
+        data: recipients.map(uid => ({
+          eventId: event.id,
+          recipientType: 'USER',
+          channel: 'PUSH',
+          status: 'NO_DEVICES_FOUND',
+        }))
+      });
+    } else {
+      // Map user to their tokens (some users might have multiple devices)
+      const tokens = devices.map(d => d.token);
+
+      // 2. Multicast using FCMService
+      const promises = tokens.map(token => 
+        this.fcmService.sendToToken(token, title, body, { url: '/events' })
+      );
+
+      const results = await Promise.allSettled(promises);
+      let successCount = 0;
+      results.forEach(res => {
+        if (res.status === 'fulfilled' && res.value) successCount++;
+      });
+
+      this.logger.log(`FCM Delivery: ${successCount}/${tokens.length} succeeded.`);
+    }
+
+    // 3. Persist success to NotificationLog and standard Notification table
+    const logs = recipients.map(uid => ({
       eventId: event.id,
-      userIds: recipients,
+      recipientType: 'USER',
+      channel: 'PUSH',
+      status: devices.length > 0 ? 'DELIVERED' : 'NO_DEVICES_FOUND',
+    }));
+
+    const standardNotifications = recipients.map(uid => ({
+      userId: uid,
+      eventId: event.id,
       title,
       body,
-    }, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 2000 }, // Exponential backoff for network transient errors
-      removeOnComplete: true,
-      removeOnFail: false
-    });
+      sentStatus: true,
+    }));
+
+    await this.prisma.$transaction([
+      this.prisma.notificationLog.createMany({ data: logs }),
+      this.prisma.notification.createMany({ data: standardNotifications })
+    ]);
   }
 }
